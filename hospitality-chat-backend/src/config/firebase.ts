@@ -1,17 +1,15 @@
 import admin from "firebase-admin";
-import fs from "fs";
-import path from "path";
-
-// Absolute path to service account key
-const serviceAccountPath = path.join(
-  process.cwd(),
-  "serviceAccountKey.json"
-);
 
 if (!admin.apps.length) {
-  const serviceAccount = JSON.parse(
-    fs.readFileSync(serviceAccountPath, "utf8")
-  );
+  const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT;
+  
+  if (!serviceAccountJson) {
+    throw new Error(
+      "FIREBASE_SERVICE_ACCOUNT environment variable is not set"
+    );
+  }
+
+  const serviceAccount = JSON.parse(serviceAccountJson);
 
   admin.initializeApp({
     credential: admin.credential.cert(serviceAccount),
