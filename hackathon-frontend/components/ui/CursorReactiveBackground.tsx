@@ -22,8 +22,9 @@ export function CursorReactiveBackground() {
         const particleCount = 80;
         const connectionDistance = 150;
         const mouseInfluenceRadius = 250;
-        const friction = 0.92; // Friction to stop movement
-        const mouseForce = 1.2;
+        const friction = 0.94; // Slightly less friction for continuous movement
+        const mouseForce = 1.5;
+        let time = 0;
 
         class Particle {
             x: number;
@@ -34,56 +35,90 @@ export function CursorReactiveBackground() {
             color: string;
             baseX: number;
             baseY: number;
+            angle: number;
+            speed: number;
+            bounceForce: number;
+            lastMouseDist: number;
 
             constructor(w: number, h: number) {
                 this.x = Math.random() * w;
                 this.y = Math.random() * h;
                 this.baseX = this.x;
                 this.baseY = this.y;
-                this.vx = 0; // No initial movement
+                this.angle = Math.random() * Math.PI * 2;
+                this.speed = Math.random() * 0.3 + 0.1; // Continuous movement speed
+                this.vx = 0;
                 this.vy = 0;
-                this.size = Math.random() * 2 + 1;
-                // Brighter White colors as requested
-                this.color = `rgba(255, 255, 255, ${Math.random() * 0.5 + 0.3})`;
+                this.size = Math.random() * 2.5 + 1.5;
+                this.bounceForce = 0; // Track bounce intensity
+                this.lastMouseDist = Infinity;
+                // Much brighter white particles
+                this.color = `rgba(255, 255, 255, ${Math.random() * 0.7 + 0.4})`;
             }
 
-            update(w: number, h: number, mx: number, my: number) {
+            update(w: number, h: number, mx: number, my: number, timeVal: number) {
+                // Continuous natural movement
+                this.vx = Math.cos(this.angle + timeVal * 0.01) * this.speed;
+                this.vy = Math.sin(this.angle + timeVal * 0.01) * this.speed;
+
                 // Apply Drag / Friction
                 this.vx *= friction;
                 this.vy *= friction;
+
+                // Mouse Interaction - Bounce and Ripple effect
+                const dx = mx - this.x;
+                const dy = my - this.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+
+                if (distance < mouseInfluenceRadius && distance > 0) {
+                    const angle = Math.atan2(dy, dx);
+                    const force = (mouseInfluenceRadius - distance) / mouseInfluenceRadius;
+
+                    // Detect if mouse is moving towards particle (ripple trigger)
+                    const isApproaching = distance < this.lastMouseDist;
+                    
+                    // Create bounce effect when cursor approaches
+                    if (isApproaching) {
+                        this.bounceForce = Math.min(this.bounceForce + 0.3, 2);
+                    } else {
+                        this.bounceForce *= 0.9; // Decay bounce
+                    }
+
+                    // Push direction away from cursor with bounce ripple
+                    const rippleWave = Math.sin(distance * 0.08 - timeVal * 0.1) * 0.5 + 0.5;
+                    const totalForce = force * mouseForce * (1 + this.bounceForce) * rippleWave;
+                    
+                    const pushX = Math.cos(angle) * totalForce;
+                    const pushY = Math.sin(angle) * totalForce;
+
+                    this.vx -= pushX;
+                    this.vy -= pushY;
+
+                    // Oscillate particle size on bounce
+                    const sizeOscillation = Math.sin(this.bounceForce * 3 + timeVal * 0.05) * 0.5 + 1;
+                } else {
+                    this.bounceForce *= 0.95; // Decay when out of range
+                }
+
+                this.lastMouseDist = distance;
 
                 // Position Update
                 this.x += this.vx;
                 this.y += this.vy;
 
-                // Mouse Interaction
-                const dx = mx - this.x;
-                const dy = my - this.y;
-                const distance = Math.sqrt(dx * dx + dy * dy);
-
-                if (distance < mouseInfluenceRadius) {
-                    const angle = Math.atan2(dy, dx);
-                    const force = (mouseInfluenceRadius - distance) / mouseInfluenceRadius;
-
-                    // Push direction away from cursor
-                    const pushX = Math.cos(angle) * force * mouseForce;
-                    const pushY = Math.sin(angle) * force * mouseForce;
-
-                    this.vx -= pushX;
-                    this.vy -= pushY;
-                }
-
-                // Boundary Check
-                if (this.x < 0) { this.x = 0; this.vx *= -1; }
-                if (this.x > w) { this.x = w; this.vx *= -1; }
-                if (this.y < 0) { this.y = 0; this.vy *= -1; }
-                if (this.y > h) { this.y = h; this.vy *= -1; }
+                // Boundary Check with wrapping
+                if (this.x < 0) { this.x = w; }
+                if (this.x > w) { this.x = 0; }
+                if (this.y < 0) { this.y = h; }
+                if (this.y > h) { this.y = 0; }
             }
 
             draw(context: CanvasRenderingContext2D) {
                 context.beginPath();
                 context.fillStyle = this.color;
-                context.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                // Size pulses with bounce
+                const displaySize = this.size * (0.7 + Math.sin(this.bounceForce * 2) * 0.3 + 0.3);
+                context.arc(this.x, this.y, displaySize, 0, Math.PI * 2);
                 context.fill();
             }
         }
@@ -105,11 +140,13 @@ export function CursorReactiveBackground() {
             const mx = mouseX.get();
             const my = mouseY.get();
 
+            time++;
+
             particles.forEach((particle, i) => {
-                particle.update(w, h, mx, my);
+                particle.update(w, h, mx, my, time);
                 particle.draw(ctx);
 
-                // Draw connections
+                // Draw connections with brighter appearance
                 for (let j = i; j < particles.length; j++) {
                     const dx = particles[i].x - particles[j].x;
                     const dy = particles[i].y - particles[j].y;
@@ -119,8 +156,8 @@ export function CursorReactiveBackground() {
                         ctx.beginPath();
                         const opacity = 1 - distance / connectionDistance;
                         // Brighter connection lines
-                        ctx.strokeStyle = `rgba(255, 255, 255, ${opacity * 0.15})`;
-                        ctx.lineWidth = 1;
+                        ctx.strokeStyle = `rgba(255, 255, 255, ${opacity * 0.25})`;
+                        ctx.lineWidth = 1.2;
                         ctx.moveTo(particles[i].x, particles[i].y);
                         ctx.lineTo(particles[j].x, particles[j].y);
                         ctx.stroke();

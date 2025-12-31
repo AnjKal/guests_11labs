@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import Link from "next/link";
-import { ArrowLeft, Mic, CheckCircle2, ShoppingBag, Utensils, Bed, Sparkles } from "lucide-react";
+import { ArrowLeft, Mic, CheckCircle2, ShoppingBag, Utensils, Bed, Sparkles, MessageSquare } from "lucide-react";
+import { chatWithAI } from "@/lib/api";
 
 const amenities = [
     { id: 'towels', name: 'Fresh Towels', icon: Bed, eta: '5 mins' },
@@ -14,10 +15,21 @@ const amenities = [
 
 export default function ConciergePage() {
     const [requesting, setRequesting] = useState<string | null>(null);
+    const [aiResponse, setAiResponse] = useState<string | null>(null);
+    const [sessionId] = useState(() => Math.random().toString(36).substring(7));
 
-    const handleRequest = (id: string) => {
+    const handleRequest = async (id: string, message: string) => {
         setRequesting(id);
-        setTimeout(() => setRequesting(null), 2000); // Simulate API call
+        setAiResponse(null);
+        try {
+            const reply = await chatWithAI(message, sessionId);
+            setAiResponse(reply);
+        } catch (error) {
+            console.error(error);
+            setAiResponse("Sorry, I couldn't process your request.");
+        } finally {
+            setRequesting(null);
+        }
     };
 
     return (
@@ -33,12 +45,14 @@ export default function ConciergePage() {
                 <div className="space-y-6">
                     <div className="glass p-8 rounded-3xl flex flex-col items-center justify-center text-center space-y-6 min-h-[300px]">
                         <div className="p-4 rounded-full bg-primary/20 text-primary">
-                            <Mic className="w-12 h-12" />
+                            {aiResponse ? <MessageSquare className="w-12 h-12" /> : <Mic className="w-12 h-12" />}
                         </div>
                         <div>
-                            <h2 className="text-2xl font-bold mb-2">How can we help?</h2>
-                            <p className="text-muted-foreground">"I need fresh towels"</p>
-                            <p className="text-muted-foreground">"Order a club sandwich"</p>
+                            <h2 className="text-2xl font-bold mb-2">{aiResponse ? "Assistant says:" : "How can we help?"}</h2>
+                            <p className="text-muted-foreground text-lg">
+                                {aiResponse || '"I need fresh towels"'}
+                            </p>
+                            {!aiResponse && <p className="text-muted-foreground">"Order a club sandwich"</p>}
                         </div>
                         <button className="px-6 py-3 rounded-full bg-primary text-primary-foreground font-bold hover:scale-105 transition-transform">
                             Tap to Speak
@@ -52,7 +66,7 @@ export default function ConciergePage() {
                         {amenities.map((item) => (
                             <motion.button
                                 key={item.id}
-                                onClick={() => handleRequest(item.id)}
+                                onClick={() => handleRequest(item.id, `I would like ${item.name}`)}
                                 disabled={!!requesting}
                                 whileHover={{ scale: 1.02 }}
                                 whileTap={{ scale: 0.98 }}
